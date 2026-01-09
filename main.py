@@ -53,7 +53,9 @@ with tab_classification:
                     probability = result.get("probability", 0)
                     st.metric("Probability", f"{probability:.2%}")
                 else:
-                    st.error(f"Error from server: {response.status_code} - {response.text}")
+                    st.error(
+                        f"Error from server: {response.status_code} - {response.text}"
+                    )
 
             except requests.exceptions.ConnectionError:
                 st.error(f"Could not connect to backend at {FORWARD_URL}")
@@ -63,59 +65,64 @@ with tab_classification:
 with tab_history:
     st.subheader("Request History")
 
-    if st.button("Refresh History"):
-        st.rerun()
+    @st.fragment
+    def history_fragment():
+        st.button("Refresh History")
 
-    try:
-        response = requests.get(HISTORY_URL)
+        try:
+            response = requests.get(HISTORY_URL)
 
-        if response.ok:
-            data = response.json()
-            requests_list = data.get("requests", [])
+            if response.ok:
+                data = response.json()
+                requests_list = data.get("requests", [])
 
-            if not requests_list:
-                st.info("No history available yet.")
+                if not requests_list:
+                    st.info("No history available yet.")
+                else:
+                    requests_list = sorted(
+                        requests_list,
+                        key=lambda x: x.get("timestamp", ""),
+                        reverse=True,
+                    )
+
+                    for req in requests_list:
+                        with st.container(border=True):
+                            col1, col2 = st.columns([2, 1])
+
+                            with col1:
+                                st.markdown(f"ID: `{req.get('id', 'N/A')}`")
+
+                                timestamp_str = req.get("timestamp", "")
+                                if timestamp_str:
+                                    try:
+                                        ts = datetime.fromisoformat(
+                                            timestamp_str.replace("Z", "+00:00")
+                                        )
+                                        formatted_ts = ts.strftime(
+                                            "%b %d, %Y, %I:%M %p"
+                                        )
+                                    except ValueError:
+                                        formatted_ts = timestamp_str
+                                else:
+                                    formatted_ts = "N/A"
+
+                                st.text(f"Timestamp: {formatted_ts}")
+                                st.text(
+                                    f"Image Size: {req.get('img_width', 'N/A')} x {req.get('img_height', 'N/A')}"
+                                )
+
+                            with col2:
+                                result_value = req.get("result")
+                                result_text = "Positive" if result_value else "Negative"
+                                st.metric("Result", result_text)
             else:
-                requests_list = sorted(
-                    requests_list,
-                    key=lambda x: x.get("timestamp", ""),
-                    reverse=True,
+                st.error(
+                    f"Error fetching history: {response.status_code} - {response.text}"
                 )
 
-                for req in requests_list:
-                    with st.container(border=True):
-                        col1, col2 = st.columns([2, 1])
+        except requests.exceptions.ConnectionError:
+            st.error(f"Could not connect to backend at {HISTORY_URL}")
+        except requests.exceptions.RequestException as e:
+            st.error(f"Request failed: {e}")
 
-                        with col1:
-                            st.markdown(f"ID: `{req.get('id', 'N/A')}`")
-
-                            timestamp_str = req.get("timestamp", "")
-                            if timestamp_str:
-                                try:
-                                    ts = datetime.fromisoformat(
-                                        timestamp_str.replace("Z", "+00:00")
-                                    )
-                                    formatted_ts = ts.strftime("%b %d, %Y, %I:%M %p")
-                                except ValueError:
-                                    formatted_ts = timestamp_str
-                            else:
-                                formatted_ts = "N/A"
-
-                            st.text(f"Timestamp: {formatted_ts}")
-                            st.text(
-                                f"Image Size: {req.get('img_width', 'N/A')} x {req.get('img_height', 'N/A')}"
-                            )
-
-                        with col2:
-                            result_value = req.get("result")
-                            result_text = "Positive" if result_value else "Negative"
-                            st.metric("Result", result_text)
-        else:
-            st.error(
-                f"Error fetching history: {response.status_code} - {response.text}"
-            )
-
-    except requests.exceptions.ConnectionError:
-        st.error(f"Could not connect to backend at {HISTORY_URL}")
-    except requests.exceptions.RequestException as e:
-        st.error(f"Request failed: {e}")
+    history_fragment()
